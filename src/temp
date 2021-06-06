@@ -1,0 +1,99 @@
+#include "Arduino.h"
+#include <H4.h>
+#include <H4Plugins.h>
+#include <AccelStepper.h>
+
+#define EN_PIN           D1 // Enable
+#define DIR_PIN          D3 // Direction
+#define STEP_PIN         D4 // Step
+constexpr uint32_t steps_per_mm = 80;
+uint maxSpeed = 5;
+uint accel = 2;
+
+AccelStepper stepper = AccelStepper(stepper.DRIVER, STEP_PIN, DIR_PIN);
+int direction = 1;
+bool running = false;
+void switchOnKinetic(uint8_t brightness);
+
+void onWiFiConnect( void );
+void onWiFiDisconnect( void );
+
+H4_USE_PLUGINS(115200,H4_Q_CAPACITY,true) // Serial baud rate, Q size, SerialCmd autostop
+H4P_VerboseMessages vm;
+H4P_SerialLogger sl;
+
+H4P_WiFi h4wifi("DUSHYANT", "ahuja987", "Kinetic", onWiFiConnect, onWiFiDisconnect);  // Configure and actyivate the WiFi Interface.
+H4P_Heartbeat h4hb;
+H4P_BinaryThing h4onof([](bool b){running = b;},OFF,0);
+
+//void run(){ running = true;}
+//void stop(){ running = false;}
+
+//H4P_UPNPServer alexa("Kinetic",run(),stop());
+
+/*H4P_ConditionalThing h4onof([](bool b){ return running; },[](bool b){
+      Serial.printf("H4P_ConditionalThing %d [condition=%d]\n",b,running);
+      running = b;
+    });*/
+bool WiFiValid = false;
+
+//******************************************************************************
+//*** WiFi Connection Established.
+//******************************************************************************
+void onWiFiConnect( void ) {
+
+  Serial.println("WiFi Connected!");
+  WiFiValid = true;
+
+  Serial.printf( "IP4 Address = " );
+  Serial.println( WiFi.localIP() );
+  
+}
+
+//******************************************************************************
+//*** WiFi Connection Lost.
+//******************************************************************************
+void onWiFiDisconnect( void ) {
+
+  Serial.println("WiFi Disconnected!");
+  WiFiValid = false;
+
+}
+
+//******************************************************************************
+//*** Main setup routine.
+//******************************************************************************
+
+void h4setup( void ) {
+  //saveDefaults();
+   //**** Activate a task to display the time.
+  randomSeed(analogRead(A0));
+  stepper.setMaxSpeed(maxSpeed*steps_per_mm); // 20mm/s @ 80 steps/mm
+  stepper.setAcceleration(accel*steps_per_mm); // 5mm/s^2
+  stepper.setEnablePin(EN_PIN);
+  stepper.setPinsInverted(false, false, true);
+  //stepper.enableOutputs();
+
+  h4.every(1000, [](){ 
+    Serial.println(stepper.distanceToGo());
+    if (stepper.distanceToGo() == 0) {
+        stepper.disableOutputs();
+        delay(random(10,100)*100);
+        if(running) {
+            stepper.move(random(100)*steps_per_mm*direction); // Move 100mm
+            if(random(10)>=5) direction = -direction;
+            stepper.enableOutputs();
+        }
+    }
+  });
+
+  //h4wifi.uiAddLabel("IP",[](){ return WiFi.localIP().toString().c_str(); });
+}
+
+void onReboot(){
+    Serial.println("This always gets called LAST and without you needing to 'hook' it");
+}
+
+void h4UserLoop(){
+  stepper.run();
+}
